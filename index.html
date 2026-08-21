@@ -1462,6 +1462,62 @@
 
             const totalStrings = Object.keys(totalsByCurr).map(c => `${getCurrencySymbol(c)} ${totalsByCurr[c].toFixed(2)}`).join(' + ') || '€ 0.00';
 
+            function exportToPDF() {
+            updatePrintHeader();
+
+            const empName = document.getElementById('userFullName')?.value || 'Dipendente';
+            const periodFrom = document.getElementById('userPeriodFrom')?.value;
+            const periodTo = document.getElementById('userPeriodTo')?.value;
+            const project = document.getElementById('userProject')?.value;
+            const printDate = new Date().toLocaleDateString('it-IT');
+
+            let periodText = '-';
+            if (periodFrom && periodTo) periodText = `Dal ${formatDate(periodFrom)} al ${formatDate(periodTo)}`;
+            else if (periodFrom) periodText = `Dal ${formatDate(periodFrom)}`;
+            else if (periodTo) periodText = `Fino al ${formatDate(periodTo)}`;
+
+            const filtered = getFilteredExpenses();
+            filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            let tableRowsHtml = '';
+            let totalsByCurr = {};
+            let receiptsHtml = '';
+
+            filtered.forEach((exp, idx) => {
+                const curr = exp.currency || 'EUR';
+                const amt = parseFloat(exp.amount || 0);
+                totalsByCurr[curr] = (totalsByCurr[curr] || 0) + amt;
+
+                tableRowsHtml += `
+                    <tr style="border-bottom: 1px solid #e2e8f0; font-size: 11px; page-break-inside: avoid !important; break-inside: avoid !important;">
+                        <td style="padding: 8px; text-align: center;">${idx + 1}</td>
+                        <td style="padding: 8px; font-weight: 500;">${formatDate(exp.date)}</td>
+                        <td style="padding: 8px;">${escapeHtml(exp.category)}</td>
+                        <td style="padding: 8px;">${escapeHtml(exp.notes || '-')}</td>
+                        <td style="padding: 8px;">${escapeHtml(exp.payment)}</td>
+                        <td style="padding: 8px; text-align: right; font-weight: bold;">${getCurrencySymbol(curr)} ${amt.toFixed(2)}</td>
+                    </tr>
+                `;
+
+                if (exp.receipt) {
+                    receiptsHtml += `
+                        <div style="page-break-inside: avoid !important; break-inside: avoid !important; -webkit-column-break-inside: avoid !important; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; background-color: #f8fafc; text-align: center; box-sizing: border-box; width: 48%; display: inline-block; vertical-align: top; margin-bottom: 14px;">
+                            <div style="font-size: 11px; font-weight: bold; color: #0f172a; margin-bottom: 4px;">
+                                Spesa #${idx + 1} - ${escapeHtml(exp.category)}
+                            </div>
+                            <div style="font-size: 10px; color: #475569; margin-bottom: 8px;">
+                                Data: <strong>${formatDate(exp.date)}</strong> | Importo: <strong style="color: #2563eb;">${getCurrencySymbol(curr)} ${amt.toFixed(2)}</strong>
+                            </div>
+                            <div style="display: flex; justify-content: center; align-items: center; max-height: 220px; overflow: hidden; page-break-inside: avoid !important; break-inside: avoid !important;">
+                                <img src="${exp.receipt}" style="max-width: 100%; max-height: 200px; object-fit: contain; border-radius: 4px; border: 1px solid #e2e8f0; background: #ffffff; display: block; margin: 0 auto; page-break-inside: avoid !important; break-inside: avoid !important;">
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+
+            const totalStrings = Object.keys(totalsByCurr).map(c => `${getCurrencySymbol(c)} ${totalsByCurr[c].toFixed(2)}`).join(' + ') || '€ 0.00';
+
             let attachmentsSection = '';
             if (receiptsHtml) {
                 attachmentsSection = `
@@ -1475,6 +1531,11 @@
             }
 
             const printElement = document.createElement('div');
+            printElement.id = 'pdf-render-temp-container';
+            printElement.style.position = 'absolute';
+            printElement.style.left = '-9999px';
+            printElement.style.top = '0';
+            printElement.style.width = '794px';
             printElement.style.padding = '24px';
             printElement.style.backgroundColor = '#ffffff';
             printElement.style.color = '#0f172a';
@@ -1492,7 +1553,7 @@
                     </div>
                 </div>
 
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background-color: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 11px; margin-bottom: 20px; page-break-inside: avoid;">
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background-color: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 11px; margin-bottom: 20px; page-break-inside: avoid !important; break-inside: avoid !important;">
                     <div><strong>Dipendente:</strong> ${escapeHtml(empName)}</div>
                     <div><strong>Periodo:</strong> ${periodText}</div>
                     <div><strong>Progetto / CDC:</strong> ${escapeHtml(project)}</div>
@@ -1513,7 +1574,7 @@
                         ${tableRowsHtml}
                     </tbody>
                     <tfoot>
-                        <tr style="background-color: #f8fafc; font-weight: bold; border-top: 2px solid #94a3b8; font-size: 12px; page-break-inside: avoid;">
+                        <tr style="background-color: #f8fafc; font-weight: bold; border-top: 2px solid #94a3b8; font-size: 12px; page-break-inside: avoid !important; break-inside: avoid !important;">
                             <td colspan="5" style="padding: 10px; text-align: right; text-transform: uppercase;">Totale Generale Nota Spese:</td>
                             <td style="padding: 10px; text-align: right; color: #1d4ed8;">${totalStrings}</td>
                         </tr>
@@ -1523,21 +1584,56 @@
                 ${attachmentsSection}
             `;
 
-            const opt = {
-                margin:       8,
-                filename:     `Nota_Spese_${empName.replace(/\s+/g, '_')}.pdf`,
-                image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2, logging: false, useCORS: true },
-                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                pagebreak:    { mode: ['css', 'legacy'] }
-            };
+            // Collega temporaneamente l'elemento al DOM così il browser forza il caricamento di tutti i pixel
+            document.body.appendChild(printElement);
 
-            if (typeof html2pdf !== 'undefined') {
-                html2pdf().set(opt).from(printElement).save();
-                showToast('Generazione PDF con scontrini allegati avviata...', 'info');
-            } else {
-                window.print();
-            }
+            showToast('Preparazione PDF e rendering allegati in corso...', 'info');
+
+            // Attende che tutte le immagini siano completamente decodificate dal browser
+            const images = printElement.querySelectorAll('img');
+            const imagePromises = Array.from(images).map(img => {
+                if (img.complete && img.naturalHeight !== 0) {
+                    return Promise.resolve();
+                }
+                return new Promise(resolve => {
+                    img.onload = resolve;
+                    img.onerror = resolve;
+                });
+            });
+
+            Promise.all(imagePromises).then(() => {
+                // Breve pausa per consentire al motore grafico del browser di ricalcolare l'altezza delle pagine
+                setTimeout(() => {
+                    const opt = {
+                        margin:       8,
+                        filename:     `Nota_Spese_${empName.replace(/\s+/g, '_')}.pdf`,
+                        image:        { type: 'jpeg', quality: 0.98 },
+                        html2canvas:  { scale: 2, logging: false, useCORS: true, allowTaint: true },
+                        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                        pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+                    };
+
+                    if (typeof html2pdf !== 'undefined') {
+                        html2pdf().set(opt).from(printElement).save().then(() => {
+                            if (document.body.contains(printElement)) {
+                                document.body.removeChild(printElement);
+                            }
+                            showToast('PDF scaricato con successo!', 'success');
+                        }).catch(err => {
+                            console.error('PDF export error:', err);
+                            if (document.body.contains(printElement)) {
+                                document.body.removeChild(printElement);
+                            }
+                            showToast('Errore durante la creazione del PDF.', 'error');
+                        });
+                    } else {
+                        if (document.body.contains(printElement)) {
+                            document.body.removeChild(printElement);
+                        }
+                        window.print();
+                    }
+                }, 300);
+            });
         }
     </script>
 </body>
