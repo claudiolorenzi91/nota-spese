@@ -1433,7 +1433,7 @@
                 totalsByCurr[curr] = (totalsByCurr[curr] || 0) + amt;
 
                 tableRowsHtml += `
-                    <tr style="border-bottom: 1px solid #e2e8f0; font-size: 11px;">
+                    <tr style="border-bottom: 1px solid #e2e8f0; font-size: 11px; page-break-inside: avoid;">
                         <td style="padding: 8px; text-align: center;">${idx + 1}</td>
                         <td style="padding: 8px; font-weight: 500;">${formatDate(exp.date)}</td>
                         <td style="padding: 8px;">${escapeHtml(exp.category)}</td>
@@ -1445,7 +1445,7 @@
 
                 if (exp.receipt) {
                     receiptsHtml += `
-                        <div style="page-break-inside: avoid; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; background-color: #f8fafc; text-align: center; box-sizing: border-box;">
+                        <div style="page-break-inside: avoid !important; break-inside: avoid !important; -webkit-column-break-inside: avoid !important; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; background-color: #f8fafc; text-align: center; box-sizing: border-box; width: 48%; display: inline-block; vertical-align: top; margin-bottom: 14px;">
                             <div style="font-size: 11px; font-weight: bold; color: #0f172a; margin-bottom: 4px;">
                                 Spesa #${idx + 1} - ${escapeHtml(exp.category)}
                             </div>
@@ -1466,8 +1466,8 @@
             if (receiptsHtml) {
                 attachmentsSection = `
                     <div style="page-break-before: always; margin-top: 20px; border-top: 2px solid #2563eb; padding-top: 16px;">
-                        <h2 style="font-size: 15px; font-weight: bold; color: #0f172a; margin-bottom: 12px;">Allegati Giustificativi e Scontrini</h2>
-                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                        <h2 style="font-size: 15px; font-weight: bold; color: #0f172a; margin-bottom: 12px; page-break-after: avoid;">Allegati Giustificativi e Scontrini</h2>
+                        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px;">
                             ${receiptsHtml}
                         </div>
                     </div>
@@ -1492,7 +1492,7 @@
                     </div>
                 </div>
 
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background-color: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 11px; margin-bottom: 20px;">
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background-color: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 11px; margin-bottom: 20px; page-break-inside: avoid;">
                     <div><strong>Dipendente:</strong> ${escapeHtml(empName)}</div>
                     <div><strong>Periodo:</strong> ${periodText}</div>
                     <div><strong>Progetto / CDC:</strong> ${escapeHtml(project)}</div>
@@ -1513,7 +1513,7 @@
                         ${tableRowsHtml}
                     </tbody>
                     <tfoot>
-                        <tr style="background-color: #f8fafc; font-weight: bold; border-top: 2px solid #94a3b8; font-size: 12px;">
+                        <tr style="background-color: #f8fafc; font-weight: bold; border-top: 2px solid #94a3b8; font-size: 12px; page-break-inside: avoid;">
                             <td colspan="5" style="padding: 10px; text-align: right; text-transform: uppercase;">Totale Generale Nota Spese:</td>
                             <td style="padding: 10px; text-align: right; color: #1d4ed8;">${totalStrings}</td>
                         </tr>
@@ -1528,7 +1528,8 @@
                 filename:     `Nota_Spese_${empName.replace(/\s+/g, '_')}.pdf`,
                 image:        { type: 'jpeg', quality: 0.98 },
                 html2canvas:  { scale: 2, logging: false, useCORS: true },
-                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                pagebreak:    { mode: ['css', 'legacy'] }
             };
 
             if (typeof html2pdf !== 'undefined') {
