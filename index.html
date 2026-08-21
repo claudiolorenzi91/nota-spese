@@ -137,8 +137,8 @@
                 </div>
 
                 <div class="flex items-center space-x-2">
-                    <button onclick="saveUserProfile()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition flex items-center gap-1.5">
-                        <i class="fa-solid fa-floppy-disk"></i> Salva Dati Anagrafici
+                    <button onclick="saveUserProfile()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shadow-sm">
+                        <i class="fa-solid fa-floppy-disk"></i> Salva Dati e Note Spese
                     </button>
                     <button onclick="promptResetData()" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold transition flex items-center gap-1.5">
                         <i class="fa-solid fa-rotate-left"></i> Resetta Tutto
@@ -601,11 +601,34 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             loadUserProfile();
+            loadExpensesFromStorage();
             document.getElementById('printDate').innerText = new Date().toLocaleDateString('it-IT');
             renderTable();
             initCharts();
             updatePrintHeader();
         });
+
+        function saveExpensesToStorage() {
+            try {
+                localStorage.setItem('nota_spese_expenses', JSON.stringify(expenses));
+            } catch(e) {
+                console.error("Errore nel salvataggio spese nel browser:", e);
+            }
+        }
+
+        function loadExpensesFromStorage() {
+            const savedExp = localStorage.getItem('nota_spese_expenses');
+            if (savedExp) {
+                try {
+                    const parsed = JSON.parse(savedExp);
+                    if (Array.isArray(parsed)) {
+                        expenses = parsed;
+                    }
+                } catch(e) {
+                    console.error("Errore nel caricamento spese da localStorage:", e);
+                }
+            }
+        }
 
         function getCurrencySymbol(code) {
             const map = {
@@ -1163,6 +1186,7 @@
                 showToast('Nuova spesa aggiunta!', 'success');
             }
 
+            saveExpensesToStorage();
             closeModal('expenseModal');
             renderTable();
         }
@@ -1203,6 +1227,7 @@
                 'Sei sicuro di voler eliminare questa voce di spesa? L\'azione non è reversibile.',
                 () => {
                     expenses = expenses.filter(x => x.id !== id);
+                    saveExpensesToStorage();
                     renderTable();
                     showToast('Spesa eliminata', 'info');
                 }
@@ -1238,8 +1263,9 @@
                 project: document.getElementById('userProject').value
             };
             localStorage.setItem('nota_spese_profile', JSON.stringify(profile));
+            saveExpensesToStorage();
             updatePrintHeader();
-            showToast('Dati anagrafici salvati!', 'success');
+            showToast('Dati anagrafici e note spese salvati con successo!', 'success');
         }
 
         function loadUserProfile() {
@@ -1285,6 +1311,7 @@
                 'Vuoi davvero resettare tutte le spese e l\'anagrafica alle impostazioni iniziali?',
                 () => {
                     localStorage.removeItem('nota_spese_profile');
+                    localStorage.removeItem('nota_spese_expenses');
                     location.reload();
                 }
             );
