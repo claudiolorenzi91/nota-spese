@@ -547,6 +547,17 @@
         </div>
     </div>
 
+    <!-- PDF Generation Loader Overlay -->
+    <div id="pdfLoadingModal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[9999] flex flex-col items-center justify-center hidden no-print text-white">
+        <div class="bg-slate-800 border border-slate-700 p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4 max-w-xs text-center">
+            <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <div>
+                <h3 class="font-bold text-sm">Generazione PDF in corso...</h3>
+                <p class="text-xs text-slate-400 mt-1">Elaborazione tabella ed estrazione scontrini in alta risoluzione.</p>
+            </div>
+        </div>
+    </div>
+
     <script>
         let expenses = [
             {
@@ -701,7 +712,7 @@
                 <text x="260" y="310" font-family="monospace" font-size="18" font-weight="bold" text-anchor="end" fill="#2563eb">${amount}</text>
                 <text x="150" y="360" font-family="monospace" font-size="11" text-anchor="middle" fill="#64748b">*** GRAZIE E ARRIVEDERCI ***</text>
             </svg>`;
-            return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+            return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
         }
 
         function getFilteredExpenses() {
@@ -1407,7 +1418,14 @@
             showToast('File CSV esportato con successo!', 'success');
         }
 
-        function exportToPDF() {
+        function showPdfLoadingModal(show) {
+            const modal = document.getElementById('pdfLoadingModal');
+            if (!modal) return;
+            if (show) modal.classList.remove('hidden');
+            else modal.classList.add('hidden');
+        }
+
+        async function exportToPDF() {
             updatePrintHeader();
 
             const empName = document.getElementById('userFullName')?.value || 'Dipendente';
@@ -1426,7 +1444,8 @@
 
             let tableRowsHtml = '';
             let totalsByCurr = {};
-            let receiptsHtml = '';
+            let receiptsTableRows = '';
+            let receiptCount = 0;
 
             filtered.forEach((exp, idx) => {
                 const curr = exp.currency || 'EUR';
@@ -1434,7 +1453,7 @@
                 totalsByCurr[curr] = (totalsByCurr[curr] || 0) + amt;
 
                 tableRowsHtml += `
-                    <tr style="border-bottom: 1px solid #e2e8f0; font-size: 11px; page-break-inside: avoid;">
+                    <tr style="border-bottom: 1px solid #e2e8f0; font-size: 11px; page-break-inside: avoid; break-inside: avoid;">
                         <td style="padding: 8px; text-align: center;">${idx + 1}</td>
                         <td style="padding: 8px; font-weight: 500;">${formatDate(exp.date)}</td>
                         <td style="padding: 8px;">${escapeHtml(exp.category)}</td>
@@ -1445,99 +1464,133 @@
                 `;
 
                 if (exp.receipt) {
-                    receiptsHtml += `
-                        <div class="receipt-card" style="page-break-inside: avoid !important; break-inside: avoid !important; -webkit-column-break-inside: avoid !important; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; background-color: #f8fafc; text-align: center; box-sizing: border-box;">
-                            <div style="font-size: 11px; font-weight: bold; color: #0f172a; margin-bottom: 4px;">
-                                Spesa #${idx + 1} - ${escapeHtml(exp.category)}
+                    if (receiptCount % 2 === 0) {
+                        if (receiptCount > 0) receiptsTableRows += '</tr>';
+                        receiptsTableRows += '<tr style="page-break-inside: avoid; break-inside: avoid;">';
+                    }
+
+                    receiptsTableRows += `
+                        <td style="width: 50%; padding: 10px; vertical-align: top;">
+                            <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; background-color: #f8fafc; text-align: center; box-sizing: border-box;">
+                                <div style="font-size: 11px; font-weight: bold; color: #0f172a; margin-bottom: 4px;">
+                                    Spesa #${idx + 1} - ${escapeHtml(exp.category)}
+                                </div>
+                                <div style="font-size: 10px; color: #475569; margin-bottom: 10px;">
+                                    Data: <strong>${formatDate(exp.date)}</strong> | Importo: <strong style="color: #2563eb;">${getCurrencySymbol(curr)} ${amt.toFixed(2)}</strong>
+                                </div>
+                                <div style="display: flex; justify-content: center; align-items: center;">
+                                    <img src="${exp.receipt}" style="max-width: 100%; max-height: 280px; width: auto; height: auto; border-radius: 4px; border: 1px solid #e2e8f0; background: #ffffff;">
+                                </div>
                             </div>
-                            <div style="font-size: 10px; color: #475569; margin-bottom: 8px;">
-                                Data: <strong>${formatDate(exp.date)}</strong> | Importo: <strong style="color: #2563eb;">${getCurrencySymbol(curr)} ${amt.toFixed(2)}</strong>
-                            </div>
-                            <div style="display: flex; justify-content: center; align-items: center; max-height: 200px; overflow: hidden;">
-                                <img src="${exp.receipt}" style="max-width: 100%; max-height: 180px; object-fit: contain; border-radius: 4px; border: 1px solid #e2e8f0; background: #ffffff;">
-                            </div>
-                        </div>
+                        </td>
                     `;
+                    receiptCount++;
                 }
             });
+
+            if (receiptCount % 2 !== 0) {
+                receiptsTableRows += '<td style="width: 50%;"></td></tr>';
+            } else if (receiptCount > 0) {
+                receiptsTableRows += '</tr>';
+            }
 
             const totalStrings = Object.keys(totalsByCurr).map(c => `${getCurrencySymbol(c)} ${totalsByCurr[c].toFixed(2)}`).join(' + ') || '€ 0.00';
 
             let attachmentsSection = '';
-            if (receiptsHtml) {
+            if (receiptCount > 0) {
                 attachmentsSection = `
                     <div style="page-break-before: always; margin-top: 20px; border-top: 2px solid #2563eb; padding-top: 16px;">
-                        <h2 style="font-size: 15px; font-weight: bold; color: #0f172a; margin-bottom: 12px; page-break-after: avoid; break-after: avoid;">Allegati Giustificativi e Scontrini</h2>
-                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px;">
-                            ${receiptsHtml}
-                        </div>
+                        <h2 style="font-size: 15px; font-weight: bold; color: #0f172a; margin-bottom: 12px;">Allegati Giustificativi e Scontrini</h2>
+                        <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
+                            <tbody>
+                                ${receiptsTableRows}
+                            </tbody>
+                        </table>
                     </div>
                 `;
             }
 
-            const printElement = document.createElement('div');
-            printElement.style.padding = '24px';
-            printElement.style.backgroundColor = '#ffffff';
-            printElement.style.color = '#0f172a';
-            printElement.style.fontFamily = 'Inter, sans-serif';
+            showPdfLoadingModal(true);
 
-            printElement.innerHTML = `
-                <div style="margin-bottom: 20px; border-bottom: 2px solid #2563eb; padding-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
-                    <div>
-                        <h1 style="font-size: 20px; font-weight: bold; color: #0f172a; margin: 0;">NOTA SPESE E RIMBORSO TRASFERTA</h1>
-                        <p style="font-size: 11px; color: #64748b; margin: 4px 0 0 0;">Documento riepilogativo per amministrazione e contabilità</p>
-                    </div>
-                    <div style="text-align: right; font-size: 10px; color: #64748b;">
-                        <p style="margin: 0;"><strong>Data Stampa:</strong> ${printDate}</p>
-                        <p style="margin: 2px 0 0 0;"><strong>Rif:</strong> NS-${Date.now().toString().slice(-6)}</p>
-                    </div>
-                </div>
-
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background-color: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 11px; margin-bottom: 20px; page-break-inside: avoid;">
-                    <div><strong>Dipendente:</strong> ${escapeHtml(empName)}</div>
-                    <div><strong>Periodo:</strong> ${periodText}</div>
-                    <div><strong>Progetto / CDC:</strong> ${escapeHtml(project)}</div>
-                </div>
-
-                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-                    <thead>
-                        <tr style="background-color: #f1f5f9; border-bottom: 2px solid #cbd5e1; font-size: 11px; font-weight: bold; text-align: left;">
-                            <th style="padding: 8px; text-align: center; width: 30px;">#</th>
-                            <th style="padding: 8px; width: 80px;">Data</th>
-                            <th style="padding: 8px; width: 140px;">Categoria</th>
-                            <th style="padding: 8px;">Note / Descrizione</th>
-                            <th style="padding: 8px; width: 110px;">Pagamento</th>
-                            <th style="padding: 8px; text-align: right; width: 100px;">Importo</th>
+            // Passiamo una stringa HTML robusta, basata su tabelle e layout classici che html2canvas digerisce al 100%
+            const htmlContent = `
+                <div style="font-family: Helvetica, Arial, sans-serif; padding: 20px; background: white; color: black; box-sizing: border-box; width: 100%;">
+                    
+                    <table style="width: 100%; margin-bottom: 20px; border-bottom: 2px solid #2563eb; padding-bottom: 12px;">
+                        <tr>
+                            <td style="vertical-align: top;">
+                                <h1 style="font-size: 20px; font-weight: bold; color: #0f172a; margin: 0;">NOTA SPESE E RIMBORSO TRASFERTA</h1>
+                                <p style="font-size: 11px; color: #64748b; margin: 4px 0 0 0;">Documento riepilogativo per amministrazione e contabilità</p>
+                            </td>
+                            <td style="vertical-align: top; text-align: right; font-size: 10px; color: #64748b;">
+                                <p style="margin: 0;"><strong>Data Stampa:</strong> ${printDate}</p>
+                                <p style="margin: 2px 0 0 0;"><strong>Rif:</strong> NS-${Date.now().toString().slice(-6)}</p>
+                            </td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        ${tableRowsHtml}
-                    </tbody>
-                    <tfoot>
-                        <tr style="background-color: #f8fafc; font-weight: bold; border-top: 2px solid #94a3b8; font-size: 12px; page-break-inside: avoid;">
-                            <td colspan="5" style="padding: 10px; text-align: right; text-transform: uppercase;">Totale Generale Nota Spese:</td>
-                            <td style="padding: 10px; text-align: right; color: #1d4ed8;">${totalStrings}</td>
-                        </tr>
-                    </tfoot>
-                </table>
+                    </table>
 
-                ${attachmentsSection}
+                    <table style="width: 100%; background-color: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 11px; margin-bottom: 20px;">
+                        <tr>
+                            <td style="width: 33%;"><strong>Dipendente:</strong> ${escapeHtml(empName)}</td>
+                            <td style="width: 33%;"><strong>Periodo:</strong> ${periodText}</td>
+                            <td style="width: 33%;"><strong>Progetto / CDC:</strong> ${escapeHtml(project)}</td>
+                        </tr>
+                    </table>
+
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                        <thead>
+                            <tr style="background-color: #f1f5f9; border-bottom: 2px solid #cbd5e1; font-size: 11px; font-weight: bold; text-align: left;">
+                                <th style="padding: 8px; text-align: center; width: 30px;">#</th>
+                                <th style="padding: 8px; width: 80px;">Data</th>
+                                <th style="padding: 8px; width: 130px;">Categoria</th>
+                                <th style="padding: 8px;">Note / Descrizione</th>
+                                <th style="padding: 8px; width: 100px;">Pagamento</th>
+                                <th style="padding: 8px; text-align: right; width: 90px;">Importo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tableRowsHtml}
+                        </tbody>
+                        <tfoot>
+                            <tr style="background-color: #f8fafc; font-weight: bold; border-top: 2px solid #94a3b8; font-size: 12px; page-break-inside: avoid; break-inside: avoid;">
+                                <td colspan="5" style="padding: 10px; text-align: right; text-transform: uppercase;">Totale Generale Nota Spese:</td>
+                                <td style="padding: 10px; text-align: right; color: #1d4ed8;">${totalStrings}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+
+                    ${attachmentsSection}
+                </div>
             `;
 
             const opt = {
-                margin:       8,
+                margin:       [10, 10, 10, 10], // Margini in mm per non far sbordare le tabelle
                 filename:     `Nota_Spese_${empName.replace(/\s+/g, '_')}.pdf`,
                 image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2, logging: false, useCORS: true },
+                html2canvas:  { 
+                    scale: 2, 
+                    logging: false, 
+                    useCORS: true, 
+                    allowTaint: true 
+                },
                 jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                pagebreak:    { mode: ['css', 'legacy'], avoid: ['.receipt-card', 'tr'] }
+                pagebreak:    { mode: ['css', 'legacy'] }
             };
 
-            if (typeof html2pdf !== 'undefined') {
-                html2pdf().set(opt).from(printElement).save();
-                showToast('Generazione PDF con scontrini allegati avviata...', 'info');
-            } else {
+            try {
+                if (typeof html2pdf !== 'undefined') {
+                    // Passiamo la stringa direttamente alla libreria!
+                    await html2pdf().set(opt).from(htmlContent).save();
+                    showToast('PDF generato con successo!', 'success');
+                } else {
+                    window.print();
+                }
+            } catch (err) {
+                console.error('Errore durante la generazione PDF:', err);
+                showToast('Errore durante la creazione del PDF. Avvio stampa del browser...', 'error');
                 window.print();
+            } finally {
+                showPdfLoadingModal(false);
             }
         }
     </script>
